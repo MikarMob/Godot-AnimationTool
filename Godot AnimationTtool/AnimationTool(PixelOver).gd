@@ -58,9 +58,12 @@ func FileGet():
 					for i in AnimArr:
 						i["cycle"] = key_cycle
 						var _frame = FileJsonRead.get("frames")
-						var _index = i["from"]
 						size = Vector2(FileJsonRead.get("meta").get("size").get("w") , FileJsonRead.get("meta").get("size").get("h"))
-						FlipSet = Vector2(_frame[_index].get("w"),_frame[_index].get("h"))
+						var _index = i["from"] as int
+						var _Set : Array[Dictionary]
+						_Set.assign(FileJsonRead.get("frames"))
+						print(_Set[i["from"]])
+						FlipSet = Vector2i(_Set[i["from"]].get("frame").get("w") ,_Set[i["from"]].get("frame").get("h") )
 						i["region_rect"] = size
 						i["hframes"] = size.x / FlipSet.x
 						i["vframes"] = size.y / FlipSet.y
