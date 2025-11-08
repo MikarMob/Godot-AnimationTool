@@ -1,7 +1,8 @@
 @tool
+
 extends AnimationPlayer
 
-class_name AnimationPlayerTool_PixelOver
+class_name AnimationTool_Aseprite
 
 @export_category("需读取文件夹路径")
 ##用于确定当需读取文件夹的路径
@@ -10,12 +11,18 @@ class_name AnimationPlayerTool_PixelOver
 @export_category("动画已储存文件")
 ##用于储存已读取的json文件
 var AnimArr : Array[Dictionary]
+var FramesArr : Array[Dictionary]
+##用于保存重要帧信息
+var AnimFrames :Dictionary
+var Setting :bool
 
 @export var SettingArr : Array[Dictionary]
 
-##用于确定文件前缀（获取键）meta ： PixelOver 文件， frameAnimations ： PixelOver 动画文件储存位置 ， size ： 图片大小
+##用于确定文件前缀（获取键）meta ： Aseprite 文件， frameTags ： Aseprite 动画文件储存位置 ， size ： 图片大小
 var meta = "meta"
-var frameAnimations = "frameAnimations"
+var frames = "frames"
+
+var frameTags = "frameTags"
 var size : Vector2
 
 var key_name = "name"
@@ -24,20 +31,21 @@ var key_speed_scale = "speed_scale"
 var ket_from = "from"
 var key_to = "to"
 var key_cycle = true
-var Setting : bool
-
-
+var AnimDicKeyName : String
+var FlipSet : Vector2i
+var Rect2D : Rect2
 
 @export_category("精灵组")
 ##加入精灵组
 @export var SpriteGroup  : Array[NodePath]
 
-
-#读取函数============================================================================================
+#读取函数===========================================================================================
 ##用于读取文件数据
 func FileGet():
+	AnimFrames.clear()
 	AnimArr.clear()
 	SettingArr.clear()
+	Rect2D = Rect2(0,0,0,0)
 	
 	var Dir = DirAccess.open(File_Path)
 	if Dir :
@@ -54,34 +62,36 @@ func FileGet():
 				if FileAccess.file_exists(File):
 					var FileOpen = FileAccess.open(File , FileAccess.READ)
 					var FileJsonRead = JSON.parse_string(FileOpen.get_as_text())
-					AnimArr.assign(FileJsonRead.get("meta").get("frameAnimations")) 
+					AnimArr.assign(FileJsonRead.get("meta").get("frameTags")) 
 					for i in AnimArr:
 						i["cycle"] = key_cycle
-						var _frame = FileJsonRead.get("frames")
 						size = Vector2(FileJsonRead.get("meta").get("size").get("w") , FileJsonRead.get("meta").get("size").get("h"))
-						var _index = i["from"] as int
-						var _Set : Array[Dictionary]
-						_Set.assign(FileJsonRead.get("frames"))
-						print(_Set[i["from"]])
-						FlipSet = Vector2i(_Set[i["from"]].get("frame").get("w") ,_Set[i["from"]].get("frame").get("h") )
+						var _rest_size : Vector2
+						FramesArr.assign(FileJsonRead.get("frames"))
+						var _index = i["from"]
+						if Rect2D == Rect2(0,0,0,0):
+							Rect2D.position = Vector2(0,0)
+							Rect2D.end =Vector2(FileJsonRead.get("meta").get("size").get("w"),FileJsonRead.get("meta").get("size").get("h"))
+						i["FlipSet"] = Vector2(FramesArr[_index].get("sourceSize").get("w"),FramesArr[_index].get("sourceSize").get("h"))
 						i["region_rect"] = size
-						i["hframes"] = size.x / FlipSet.x
-						i["vframes"] = size.y / FlipSet.y
+						i["speed_scale"] = FileJsonRead.get("meta").get("scale") as float
+						var _Filpset = i["FlipSet"]
+						i["hframes"] = size.x / _Filpset.x
+						i["vframes"] = size.y / _Filpset.y
+						i["fps"] = 1 / FramesArr[i["from"]].get("duration") * 1000 as int
 						SettingArr.append(i)
-						
 			DirName =Dir.get_next()
 	
 	else:
 		print("找不到文件路径")
 
-
 @export_category("动画相关设置")
-##获取动画组名，自定义,指示器： LibName + TypeName = AnimName 用于动画分组
+##输入动画组名，自定义,指示器： LibName + TypeName = AnimName 用于动画分组
 @export var LibName = ""
-##获取手持物品名，自定义,指示器： LibName + TypeName = AnimName 用于动画分组
+##输入类型名，自定义,指示器： LibName + TypeName = AnimName 用于动画分组
 @export var TypeName = ""
-##确认分割步长，sprite中Region的贴图分割步长
-var FlipSet : Vector2
+
+
 
 var AnimTrack  : Array
 
@@ -94,30 +104,35 @@ var region_rect : Rect2
 var hframes : int
 var vframes : int 
 var anim_speed_scale : float
-var fps : float
+var fps : int
 var animspeed : float
 var animlib : String
 var cycle : bool
 
-
-
-
 #用于创建动画=========================================================================================
 ##用于创建动画
 func AnimSetting():
+	for sprite in SpriteGroup :
+		if sprite != null:
+			var _Sprite2D := get_node(sprite) as Sprite2D
+			_Sprite2D.region_rect = Rect2D
 	animlib = LibName + "_" + TypeName
 	for i in SettingArr:
 		if i != null:
 			from = i["from"]
+			
 			to = i["to"]
 			AnimName = i["name"]
 			Size = Vector2(i["region_rect"].x,i["region_rect"].y)
 			hframes = i["hframes"]
 			vframes = i["vframes"]
-			anim_speed_scale = i["speed_scale"]
-			fps = i["fps"]
+			fps = i["fps"] as int
 			cycle = i["cycle"]
-			animspeed = 1 / fps / anim_speed_scale
+			var _scale = i["speed_scale"] as float
+			anim_speed_scale = _scale
+			
+			
+			animspeed = 1.0 / fps / anim_speed_scale
 			region_rect = Rect2(Vector2(0,0) , Size)
 			
 			var AnimName_All = animlib + "/"+ AnimName
@@ -189,6 +204,7 @@ func AnimSetting():
 						
 					#无动画时
 					if ! has_animation(AnimName_All):
+						
 						anim = Animation.new()
 						anim.length = (to - from + 1) * animspeed
 						
