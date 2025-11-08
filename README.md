@@ -1,3 +1,3 @@
 # GD Anim Creator(Json-Sprite)
 
-##How to use
+如何使用
